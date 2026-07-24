@@ -25,13 +25,14 @@ class LLMEncoder(nn.Module):
     """
 
     def __init__(self, hidden_dim=256, llm_dim=1536, model_name=None,
-                 llm_batch_size=16, device='cuda'):
+                 llm_batch_size=16, use_4bit=True, device='cuda'):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.llm_dim = llm_dim
         self.device = device
         self.model_name = model_name or "Qwen/Qwen2.5-1.5B-Instruct"
-        self.llm_batch_size = llm_batch_size  # max TMs per LLM forward
+        self.llm_batch_size = llm_batch_size
+        self.use_4bit = use_4bit
         self._model = None
         self._tokenizer = None
 
@@ -72,26 +73,32 @@ class LLMEncoder(nn.Module):
         )
         from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-        bnb = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,
-        )
+        if self.use_4bit:
+            bnb = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                quantization_config=bnb,
+                device_map="auto",
+                torch_dtype=torch.float16,
+                trust_remote_code=True,
+            )
+            model = prepare_model_for_kbit_training(model)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                device_map="auto",
+                torch_dtype=torch.float16,
+                trust_remote_code=True,
+            )
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            quantization_config=bnb,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
-        )
         tokenizer = AutoTokenizer.from_pretrained(
             self.model_name, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-
-        # Prepare for k-bit training
-        model = prepare_model_for_kbit_training(model)
 
         # LoRA: only Q and V projections
         lora = LoraConfig(

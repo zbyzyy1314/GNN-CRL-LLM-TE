@@ -211,6 +211,8 @@ def main():
                    help='HuggingFace model name for LLM encoder')
     p.add_argument('--llm-batch-size', type=int, default=8,
                    help='Batch size per LLM forward pass (reduce if OOM)')
+    p.add_argument('--llm-fp16', action='store_true',
+                   help='Load LLM in FP16 instead of 4-bit (faster, needs 24GB)')
     p.add_argument('--llm-dim', type=int, default=1536,
                    help='LLM hidden dimension')
     p.add_argument('--ppo-epochs', type=int, default=8,
@@ -263,7 +265,7 @@ def main():
 
     if args.network == "gnn_llm":
         from te_framework.llm_encoder import LLMEncoder
-        llm_enc = LLMEncoder(hidden_dim=128, llm_dim=args.llm_dim, llm_batch_size=args.llm_batch_size, model_name=args.llm_model, device=device)
+        llm_enc = LLMEncoder(hidden_dim=128, llm_dim=args.llm_dim, llm_batch_size=args.llm_batch_size, use_4bit=not args.llm_fp16, model_name=args.llm_model, device=device)
         llm_enc.load_model()
         policy = TEGNNLLMPolicy(topo, llm_enc, hidden_dim=128).to(device)
         value = GNNValueNetwork(topo, hidden_dim=128).to(device)
