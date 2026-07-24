@@ -53,6 +53,7 @@ def _edge_data(topo):
 
 
 class TEGNNPolicy(nn.Module):
+    """GNN policy network. Use TEGNNLLMPolicy for LLM-enhanced version."""
     def __init__(self, topo, hidden_dim=256, num_layers=3, max_k=8, top_k=3):
         super().__init__()
         self.num_nodes = topo.num_nodes
@@ -73,22 +74,50 @@ class TEGNNPolicy(nn.Module):
 
     def _nf(self, tm):
         B,N=tm.shape[:2]
-        v=torch.cat([tm, tm.transpose(1,2)], dim=-1)  # (B,N,2N) full rows + columns
+        v=torch.cat([tm, tm.transpose(1,2)], dim=-1)
         return v/v.max().clamp(min=1e-8)
 
-    def forward(self, tm, path_mask=None):
-        B=tm.shape[0];ne=self.enc(self._nf(tm))
-        for b in self.blocks:ne=b(ne,self.edge_index,self.edge_feat)
+    def encode_nodes(self, tm):
+        """Extract node embeddings without decoder. Used by LLM-enhanced version."""
+        ne = self.enc(self._nf(tm))
+        for b in self.blocks:
+            ne = b(ne, self.edge_index, self.edge_feat)
+        return ne
+
+    def decode_pairs(self, ne, tm, path_mask=None):
+        """Decode node embeddings to path logits."""
         s,d=ne[:,self.pair_src],ne[:,self.pair_dst]
         logits=self.dec(torch.cat([s,d,tm[:,self.pair_src,self.pair_dst].unsqueeze(-1)],-1))
         if path_mask is not None:logits=torch.where(path_mask.unsqueeze(0),logits,torch.full_like(logits,-1e9))
         return logits
+
+    def forward(self, tm, path_mask=None):
+        ne=self.encode_nodes(tm)
+        return self.decode_pairs(ne, tm, path_mask)
 
     def get_action(self,x,path_mask,deterministic=False):
         logits=self.forward(x,path_mask);probs=F.softmax(logits,-1)
         dist=torch.distributions.Categorical(probs)
         actions=probs.argmax(-1) if deterministic else dist.sample()
         return actions,dist.log_prob(actions),dist.entropy()
+
+
+class TEGNNLLMPolicy(TEGNNPolicy):
+    """GNN + LLM enhanced policy. GNN encodes structure, LLM adds semantic reasoning."""
+
+    def __init__(self, topo, llm_encoder, hidden_dim=256, num_layers=3, max_k=8):
+        super().__init__(topo, hidden_dim=hidden_dim, num_layers=num_layers, max_k=max_k)
+        self.llm = llm_encoder
+
+    def encode_nodes(self, tm):
+        """GNN encode → LLM enhance → enhanced node embeddings."""
+        ne = super().encode_nodes(tm)                # (B, N, D) from GNN
+        enhanced = self.llm(tm, ne)                   # (B, N, D) LLM reasoned
+        return enhanced
+
+    def forward(self, tm, path_mask=None):
+        ne = self.encode_nodes(tm)
+        return self.decode_pairs(ne, tm, path_mask)
 
 
 class GNNValueNetwork(nn.Module):

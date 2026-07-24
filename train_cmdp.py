@@ -20,7 +20,7 @@ from te_framework.topology import Topology
 from te_framework.traffic import TrafficLoader
 from te_framework.env import TEEnv
 from te_framework.networks import PathSelectionNetwork, ValueNetwork
-from te_framework.networks.gnn import TEGNNPolicy, GNNValueNetwork
+from te_framework.networks.gnn import TEGNNPolicy, TEGNNLLMPolicy, GNNValueNetwork
 
 
 # ─── Reward Shaping Agent (simple baseline) ───
@@ -202,11 +202,17 @@ def main():
                    choices=['baseline','lagrangian','shaping','safety','cvar','combined','dqn'])
     p.add_argument('--device', default='cuda')
     p.add_argument('--epochs', type=int, default=100)
-    p.add_argument('--collection-batch', type=int, default=256)
+    p.add_argument('--collection-batch', type=int, default=128)
     p.add_argument('--lr', type=float, default=1e-4)
     p.add_argument('--entropy-coef', type=float, default=0.05)
-    p.add_argument('--network', default='cnn', choices=['cnn','gnn'],
-                   help='Network architecture')
+    p.add_argument('--network', default='cnn', choices=['cnn','gnn','gnn_llm'],
+                   help='Network architecture (gnn_llm = GNN + LLM enhanced)')
+    p.add_argument('--llm-model', default='Qwen/Qwen2.5-1.5B-Instruct',
+                   help='HuggingFace model name for LLM encoder')
+    p.add_argument('--llm-batch-size', type=int, default=8,
+                   help='Batch size per LLM forward pass (reduce if OOM)')
+    p.add_argument('--llm-dim', type=int, default=1536,
+                   help='LLM hidden dimension')
     p.add_argument('--ppo-epochs', type=int, default=8,
                    help='PPO update epochs per batch')
     p.add_argument('--ckpt-dir', default='checkpoints')
@@ -255,7 +261,13 @@ def main():
 
     print(f'[*] N={topo.num_nodes} L={topo.num_links} P={topo.num_pairs} K={topo.max_k}')
 
-    if args.network == 'gnn':
+    if args.network == "gnn_llm":
+        from te_framework.llm_encoder import LLMEncoder
+        llm_enc = LLMEncoder(hidden_dim=128, llm_dim=args.llm_dim, llm_batch_size=args.llm_batch_size, model_name=args.llm_model, device=device)
+        llm_enc.load_model()
+        policy = TEGNNLLMPolicy(topo, llm_enc, hidden_dim=128).to(device)
+        value = GNNValueNetwork(topo, hidden_dim=128).to(device)
+    elif args.network == "gnn":
         policy = TEGNNPolicy(topo, hidden_dim=128).to(device)
         value = GNNValueNetwork(topo, hidden_dim=128).to(device)
     else:
