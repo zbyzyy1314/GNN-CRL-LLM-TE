@@ -83,7 +83,7 @@ class LLMEncoder(nn.Module):
                 self.model_name,
                 quantization_config=bnb,
                 device_map="auto",
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
                 trust_remote_code=True,
             )
             model = prepare_model_for_kbit_training(model)
@@ -91,7 +91,7 @@ class LLMEncoder(nn.Module):
             model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 device_map="auto",
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
                 trust_remote_code=True,
             )
 
