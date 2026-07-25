@@ -111,6 +111,14 @@ class CombinedCMDPAgent:
 
 
     def load(self, path):
-        ckpt = torch.load(path, map_location=self.device)
-        self.policy.load_state_dict(ckpt['policy'])
-        self.value.load_state_dict(ckpt['value'])
+        ckpt = torch.load(path, map_location=self.device, weights_only=True)
+        # Skip topology-specific keys, load only compatible ones
+        policy_state = {k: v for k, v in ckpt['policy'].items()
+                        if k not in ('pair_src', 'pair_dst', 'edge_index', 'edge_feat')
+                        and not k.startswith('enc.')
+                        and not k.startswith('dec.')}
+        missing, unexpected = self.policy.load_state_dict(policy_state, strict=False)
+        if missing:
+            print(f'  Skipped {len(missing)} topology-specific params')
+        if ckpt.get('value') is not None:
+            self.value.load_state_dict(ckpt['value'], strict=False)
