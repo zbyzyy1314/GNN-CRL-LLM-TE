@@ -218,6 +218,7 @@ def main():
     p.add_argument('--ppo-epochs', type=int, default=8,
                    help='PPO update epochs per batch')
     p.add_argument('--ckpt-dir', default='checkpoints')
+    p.add_argument('--max-paths', type=int, default=8, help='Max candidate paths per SD pair')
     p.add_argument('--eval-interval', type=int, default=20)
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--mean-util-threshold', type=float, default=0.3,
@@ -241,7 +242,7 @@ def main():
     if device.type == 'cuda':
         print(f'[*] GPU: {torch.cuda.get_device_name(0)}')
 
-    topo = Topology(args.topo, max_paths_per_pair=8)
+    topo = Topology(args.topo, max_paths_per_pair=args.max_paths)
     train_traf = TrafficLoader(args.traffic, topo.num_nodes)
     test_traf = TrafficLoader(args.test, topo.num_nodes)
     env = TEEnv(topo, train_traf, device=device)
