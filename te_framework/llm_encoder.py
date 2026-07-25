@@ -123,12 +123,12 @@ class LLMEncoder(nn.Module):
         self._model = model
         self._tokenizer = tokenizer
 
-        # Move projection layers to the same device as the LLM
+        # Move ALL projection layers to the LLM device AND dtype
         llm_device = model.device
         llm_dtype = model.dtype
         self.gnn_to_llm.to(llm_device, dtype=llm_dtype)
         self.llm_to_gnn.to(llm_device, dtype=llm_dtype)
-        self.cross_fusion.to(llm_device)
+        self.cross_fusion.to(llm_device, dtype=llm_dtype)
 
     @property
     def model(self):
