@@ -268,10 +268,10 @@ def main():
         from te_framework.llm_encoder import LLMEncoder
         llm_enc = LLMEncoder(hidden_dim=128, llm_dim=args.llm_dim, llm_batch_size=args.llm_batch_size, use_4bit=not args.llm_fp16, model_name=args.llm_model, device=device)
         llm_enc.load_model()
-        policy = TEGNNLLMPolicy(topo, llm_enc, hidden_dim=128).to(device)
+        policy = TEGNNLLMPolicy(topo, llm_enc, hidden_dim=128, max_k=topo.max_k).to(device)
         value = GNNValueNetwork(topo, hidden_dim=128).to(device)
     elif args.network == "gnn":
-        policy = TEGNNPolicy(topo, hidden_dim=128).to(device)
+        policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).to(device)
         value = GNNValueNetwork(topo, hidden_dim=128).to(device)
     else:
         policy = PathSelectionNetwork(topo.num_nodes, topo.num_pairs, topo.max_k,
@@ -319,7 +319,7 @@ def main():
     elif args.method == 'dqn':
         # Create a second network as target
         if args.network == 'gnn':
-            target_net = TEGNNPolicy(topo, hidden_dim=128).to(device)
+            target_net = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).to(device)
         else:
             target_net = PathSelectionNetwork(topo.num_nodes, topo.num_pairs, topo.max_k,
                                                fc_dims=[512,512]).to(device)
