@@ -192,6 +192,7 @@ def evaluate(agent, env, cb=512):
         'avg_mlu': all_m.mean().item(), 'max_mlu': all_m.max().item(),
         'avg_ecmp': all_e.mean().item(),
         'improvement': (all_e.mean()-all_m.mean()).item()/all_e.mean().item()*100,
+        'violation_rate': (all_m > 1.0).float().mean().item() * 100,
         **agg_costs
     }
 
@@ -355,8 +356,12 @@ def main():
             states = env.get_states(idx_b)
             raw_actions, log_probs, values = agent.act_batch(states)
 
-            if args.method in ('safety', 'combined'):
+            if args.method == 'safety':
                 safe_actions, corrections = agent.project_and_act(idx_b, raw_actions)
+                actions = safe_actions
+                ep_corrections.append(corrections.float().mean().item())
+            elif args.method == 'combined':
+                safe_actions, corrections = agent.safety.project(idx_b, raw_actions)
                 actions = safe_actions
                 ep_corrections.append(corrections.float().mean().item())
             else:
