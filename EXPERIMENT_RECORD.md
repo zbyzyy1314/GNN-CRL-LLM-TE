@@ -302,6 +302,16 @@ Safety Layer 在实践中触发极少——因为 PPO+CVaR 已经能避免几乎
 
 ---
 
+
+### 6. 跨拓扑泛化实验（GEANT训练 → Abilene零样本测试）
+
+纯 GNN 转移（只加载 MPBlock 层，encoder/decoder 随机初始化）:
+
+
+
+**结论: GNN 无法跨拓扑。MPBlock 转移后 MLU=0.319 仅略优于随机(0.50), 远差于正常训练(0.087).**
+**跨拓扑泛化只能依赖 LLM. 服务器上的 LLM 零样本测试是关键实验.**
+
 ## 五、GNN+LLM 进展
 
 ### 实现状态
