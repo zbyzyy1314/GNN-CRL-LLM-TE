@@ -100,6 +100,17 @@ class TEGNNPolicy(nn.Module):
         dist=torch.distributions.Categorical(probs)
         actions=probs.argmax(-1) if deterministic else dist.sample()
         return actions,dist.log_prob(actions),dist.entropy()
+    def transfer_state_dict(self):
+        """Extract topology-independent layers for cross-topology transfer."""
+        state = {}
+        for name, param in self.blocks.state_dict().items():
+            state[f'blocks.{name}'] = param
+        return state
+
+    def load_transfer(self, state_dict):
+        """Load topology-independent layers from another topology."""
+        missing, unexpected = self.load_state_dict(state_dict, strict=False)
+        return missing, unexpected
 
 
 class TEGNNLLMPolicy(TEGNNPolicy):

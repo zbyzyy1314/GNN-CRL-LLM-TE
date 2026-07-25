@@ -213,7 +213,10 @@ def main():
     p.add_argument('--llm-batch-size', type=int, default=8,
                    help='Batch size per LLM forward pass (reduce if OOM)')
     p.add_argument('--llm-fp16', action='store_true',
-                   help='Load LLM in FP16 instead of 4-bit (faster, needs 24GB)')
+                   help='Load LLM in BF16 instead of 4-bit (faster, needs 24GB)')
+    p.add_argument('--save', help='Save checkpoint path (default: checkpoints/{method}.pt)')
+    p.add_argument('--load', help='Load checkpoint for testing')
+    p.add_argument('--test-only', action='store_true', help='Skip training, only evaluate loaded model')
     p.add_argument('--llm-dim', type=int, default=1536,
                    help='LLM hidden dimension')
     p.add_argument('--ppo-epochs', type=int, default=8,
@@ -335,7 +338,17 @@ def main():
     os.makedirs(args.ckpt_dir, exist_ok=True)
     cb = args.collection_batch
 
-    print(f'\n{"="*60}')
+    # ─── Load checkpoint ───
+    if args.load:
+        print(f'[*] Loading checkpoint from {args.load}')
+        agent.load(args.load)
+        print(f'[*] Loaded. Testing only...')
+        res = evaluate(agent, test_env, cb)
+        imp = '+' if res['improvement'] >= 0 else ''
+        print(f'  Test | MLU={res['avg_mlu']:.4f} ({imp}{res['improvement']:.1f}% vs ECMP)')
+        return
+
+    # ─── Training header ───
     print(f'Training {args.method} ({args.epochs} epochs, batch={cb})')
     print(f'Thresholds: {thresholds}')
     print(f'{"="*60}')
@@ -427,7 +440,13 @@ def main():
     print(f'Final ({args.method}): MLU={res["avg_mlu"]:.4f} '
           f'util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} '
           f'p95={res["p95_util"]:.4f}')
-    agent.save(os.path.join(args.ckpt_dir, f'{args.method}_final.pt'))
+    save_path = args.save or os.path.join(args.ckpt_dir, f'{args.method}_final.pt')
+    agent.save(save_path)
+    # Also save transfer weights (topology-independent layers)
+    if args.network in ('gnn', 'gnn_llm'):
+        transfer_path = save_path.replace('.pt', '_transfer.pt')
+        torch.save(policy.transfer_state_dict(), transfer_path)
+        print(f'[*] Transfer weights saved to {transfer_path}')
 
 
 if __name__ == '__main__':
