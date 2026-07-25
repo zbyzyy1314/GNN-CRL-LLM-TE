@@ -354,10 +354,9 @@ def main():
             states = env.get_states(idx_b)
             raw_actions, log_probs, values = agent.act_batch(states)
 
-            if args.method == 'safety':
+            if args.method in ('safety', 'combined'):
                 safe_actions, corrections = agent.project_and_act(idx_b, raw_actions)
                 actions = safe_actions
-                # Log correction rate
                 ep_corrections.append(corrections.float().mean().item())
             else:
                 actions = raw_actions
@@ -403,8 +402,8 @@ def main():
             if args.method == 'lagrangian':
                 ls = agent.get_lambda_state()
                 print(f'  λ: {" ".join(f"{k}={v:.3f}" for k,v in ls.items())}')
-            if args.method == 'safety' and ep_corrections:
-                print(f'  Corrections/step: {np.mean(ep_corrections):.1f}')
+            if args.method in ('safety', 'combined') and ep_corrections:
+                print(f'  Safety corrections/step: {np.mean(ep_corrections):.1f}')
 
         if epoch % args.eval_interval == 0:
             res = evaluate(agent, test_env, cb)

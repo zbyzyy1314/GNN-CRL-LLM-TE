@@ -204,14 +204,14 @@ class SafetyLayerPPOAgent:
                 logits = self.policy(s_b, self.path_mask)
                 probs = F.softmax(logits, dim=-1)
                 dist = torch.distributions.Categorical(probs)
-                new_lp = dist.log_prob(a_b).sum(dim=-1)
-                old_lp = old_lp_b.sum(dim=-1)
+                new_lp = dist.log_prob(a_b)
+                old_lp = old_lp_b
                 ratio = torch.exp(new_lp - old_lp)
-                surr1 = ratio * adv_b
-                surr2 = torch.clamp(ratio, 1-self.clip_ratio, 1+self.clip_ratio) * adv_b
+                surr1 = ratio * adv_b.unsqueeze(-1)
+                surr2 = torch.clamp(ratio, 1-self.clip_ratio, 1+self.clip_ratio) * adv_b.unsqueeze(-1)
                 loss = (-torch.min(surr1, surr2).mean()
                         + self.value_coef * F.mse_loss(self.value(s_b), ret_b)
-                        + self.entropy_coef * (-dist.entropy().sum(dim=-1).mean()))
+                        + self.entropy_coef * (-dist.entropy().mean()))
                 self.optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(
