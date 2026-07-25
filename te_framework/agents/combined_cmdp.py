@@ -121,4 +121,7 @@ class CombinedCMDPAgent:
         if missing:
             print(f'  Skipped {len(missing)} topology-specific params')
         if ckpt.get('value') is not None:
-            self.value.load_state_dict(ckpt['value'], strict=False)
+            value_state = {k: v for k, v in ckpt['value'].items()
+                           if k not in ('pair_src', 'pair_dst', 'edge_index', 'edge_feat')
+                           and not k.startswith('enc.')}
+            self.value.load_state_dict(value_state, strict=False)
