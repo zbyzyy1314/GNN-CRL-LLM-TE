@@ -149,6 +149,9 @@ class LLMEncoder(nn.Module):
         B, N, D = node_emb.shape
         bs = self.llm_batch_size
         all_enhanced = []
+        # Cast to projection layer dtype (FP32 input → FP16 LLM)
+        dtype = self.gnn_to_llm[1].weight.dtype
+        node_emb = node_emb.to(dtype)
         llm_tokens = self.gnn_to_llm(node_emb)
         prompt = self._build_prompt(tm, topo_info)
         tokens = self.tokenizer(prompt, return_tensors="pt", padding=True,
