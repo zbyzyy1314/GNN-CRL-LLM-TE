@@ -108,3 +108,9 @@ class CombinedCMDPAgent:
             'optimizer': self.optimizer.state_dict(),
             'lambdas': {k: v.item() for k, v in self.lambdas.items()},
         }, path)
+
+
+    def load(self, path):
+        ckpt = torch.load(path, map_location=self.device)
+        self.policy.load_state_dict(ckpt['policy'])
+        self.value.load_state_dict(ckpt['value'])
