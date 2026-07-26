@@ -137,8 +137,8 @@ class TEGNNPolicy(nn.Module):
 class TEGNNLLMPolicy(TEGNNPolicy):
     """GNN + LLM enhanced policy. GNN encodes structure, LLM adds semantic reasoning."""
 
-    def __init__(self, topo, llm_encoder, hidden_dim=256, num_layers=3, max_k=8, temporal=False, history_len=12):
-        super().__init__(topo, hidden_dim=hidden_dim, num_layers=num_layers, max_k=max_k, temporal=temporal, history_len=history_len)
+    def __init__(self, topo, llm_encoder, hidden_dim=256, num_layers=3, max_k=8):
+        super().__init__(topo, hidden_dim=hidden_dim, num_layers=num_layers, max_k=max_k)
         self.llm = llm_encoder
 
     def encode_nodes(self, tm):
