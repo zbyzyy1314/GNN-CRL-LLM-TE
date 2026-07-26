@@ -137,19 +137,23 @@ class TEGNNPolicy(nn.Module):
 class TEGNNLLMPolicy(TEGNNPolicy):
     """GNN + LLM enhanced policy. GNN encodes structure, LLM adds semantic reasoning."""
 
-    def __init__(self, topo, llm_encoder, hidden_dim=256, num_layers=3, max_k=8):
-        super().__init__(topo, hidden_dim=hidden_dim, num_layers=num_layers, max_k=max_k)
+    def __init__(self, topo, llm_encoder, hidden_dim=256, num_layers=3, max_k=8, temporal=False, history_len=12):
+        super().__init__(topo, hidden_dim=hidden_dim, num_layers=num_layers, max_k=max_k, temporal=temporal, history_len=history_len)
         self.llm = llm_encoder
 
     def encode_nodes(self, tm):
-        """GNN encode → LLM enhance → enhanced node embeddings."""
-        ne = super().encode_nodes(tm)                # (B, N, D) from GNN
-        enhanced = self.llm(tm, ne)                   # (B, N, D) LLM reasoned
+        if self.temporal:
+            B,H,N,_=tm.shape
+            ne=super().encode_nodes(tm.reshape(B*H,N,N)).reshape(B,H,N,-1).mean(dim=1)
+        else:
+            ne=super().encode_nodes(tm)
+        enhanced=self.llm(tm,ne)
         return enhanced
 
     def forward(self, tm, path_mask=None):
-        ne = self.encode_nodes(tm)
-        return self.decode_pairs(ne, tm, path_mask)
+        ne=self.encode_nodes(tm)
+        tm_cur=tm[:,-1] if (self.temporal and tm.dim()==4) else tm
+        return self.decode_pairs(ne,tm_cur,path_mask)
 
 
 class GNNValueNetwork(nn.Module):
