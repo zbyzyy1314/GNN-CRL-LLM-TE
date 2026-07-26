@@ -49,7 +49,7 @@ class TEEnv:
         """Get normalized states for given TM indices. Returns (B, N, N)."""
         return self.norm_tm[indices]
 
-    def get_temporal_states(self, batch_start, history_len=12):
+    def get_temporal_states(self, batch_start, history_len=12, batch_size=128):
         """Get sliding window of TMs for temporal causality.
         
         Returns state based on TM_{t-H} to TM_{t-1} (history),
@@ -63,9 +63,9 @@ class TEEnv:
             state: (B, history_len, N, N) normalized historical TMs
             target_idx: (B,) indices of current TM for reward computation
         """
-        B = min(batch_start - history_len + 1, self.num_tms - batch_start)
+        B = min(batch_size, self.num_tms - batch_start)
         state = torch.stack([
-            self.norm_tm[batch_start - history_len + i]
+            self.norm_tm[batch_start - history_len + i : batch_start + i]
             for i in range(B)
         ], dim=0)  # (B, H, N, N)
         target_idx = torch.arange(batch_start, batch_start + B, device=self.device)

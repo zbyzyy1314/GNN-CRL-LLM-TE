@@ -178,7 +178,7 @@ def evaluate(agent, env, cb=512):
             n_batches = (env.num_tms - H) // cb
             for batch_idx in range(n_batches):
                 t = H + batch_idx * cb
-                states, target_idx = env.get_temporal_states(t, H)
+                states, target_idx = env.get_temporal_states(t, H, cb)
                 idx_b = target_idx
                 actions, _, _ = agent.act_batch(states, deterministic=True)
                 _, mlus, loads = env.step_batch_idx(idx_b, actions)
@@ -382,7 +382,7 @@ def main():
             n_batches = (env.num_tms - H) // cb
             for batch_idx in range(n_batches):
                 t = H + batch_idx * cb
-                states, target_idx = env.get_temporal_states(t, H)
+                states, target_idx = env.get_temporal_states(t, H, cb)
                 idx_b = target_idx
                 raw_actions, log_probs, values = agent.act_batch(states)
         else:
