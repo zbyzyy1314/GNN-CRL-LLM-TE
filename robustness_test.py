@@ -39,7 +39,7 @@ print('=' * 60)
 topo = Topology('data/GEANT', max_paths_per_pair=8)
 agent, env = make_agent(topo)
 res = evaluate(agent, env, 512)
-print(f'1. Baseline (no fault):    MLU={res[\"avg_mlu\"]:.4f}')
+print(f'1. Baseline (no fault):    MLU={res['avg_mlu']:.4f}')
 baseline_mlu = res['avg_mlu']
 
 # ─── 2. Link Failures ───
@@ -65,7 +65,7 @@ for num_failures in [1, 3, 5, 10]:
         {'mean_util':0.3,'overload_ratio':0.1,'p95_util':0.5}, device='cuda')
     res = evaluate(agent, env, 512)
     degrad = (res['avg_mlu'] - baseline_mlu) / baseline_mlu * 100
-    print(f'  {num_failures} link(s) down: MLU={res[\"avg_mlu\"]:.4f} ({degrad:+.1f}% vs baseline)')
+    print(f'  {num_failures} link(s) down: MLU={res['avg_mlu']:.4f} ({degrad:+.1f}% vs baseline)')
 
 # ─── 3. Traffic Bursts (LMTE Fig 11) ───
 print(f'\n{"="*60}')
@@ -96,7 +96,7 @@ for scale in [2, 5, 10, 20, 30]:
         {'mean_util':0.3,'overload_ratio':0.1,'p95_util':0.5}, device='cuda')
     res = evaluate(agent, env, 512)
     degrad = (res['avg_mlu'] - baseline_mlu) / baseline_mlu * 100
-    print(f'  Burst scale={scale:2d}:  MLU={res[\"avg_mlu\"]:.4f} ({degrad:+.1f}% vs baseline)')
+    print(f'  Burst scale={scale:2d}:  MLU={res['avg_mlu']:.4f} ({degrad:+.1f}% vs baseline)')
 
 # ─── 4. Natural Drift (LMTE Table 1) ───
 print(f'\n{"="*60}')
@@ -131,7 +131,7 @@ for start_pct, label in [(0, '0-25%'), (25, '25-50%'), (50, '50-75%')]:
         {'mean_util':0.3,'overload_ratio':0.1,'p95_util':0.5}, device='cuda')
     res = evaluate(agent, env, 512)
     degrad = (res['avg_mlu'] - baseline_mlu) / baseline_mlu * 100
-    print(f'  Train on {label}: MLU={res[\"avg_mlu\"]:.4f} ({degrad:+.1f}% vs baseline)')
+    print(f'  Train on {label}: MLU={res['avg_mlu']:.4f} ({degrad:+.1f}% vs baseline)')
 
 print(f'\n{"="*60}')
 print('Done. Compare with LMTE paper Figs 10-11 and Table 1.')
