@@ -18,13 +18,22 @@ CKPT = sys.argv[1] if len(sys.argv) > 1 else 'checkpoints/combined_best.pt'
 assert os.path.exists(CKPT), f'Checkpoint not found: {CKPT}'
 TOPO = Topology('data/GEANT', max_paths_per_pair=8)
 CKPT_D = torch.load(CKPT, map_location='cuda')
+# Detect if checkpoint is from temporal model
+IS_TEMPORAL = any('temp_enc' in k for k in CKPT_D['policy'])
+if IS_TEMPORAL:
+    print('  Detected temporal checkpoint, using temporal mode')
+else:
+    print('  Detected non-temporal checkpoint')
 
 def make_agent_env(topo=TOPO, traffic=None):
     if traffic is None:
         traffic = TrafficLoader('data/GEANTTM2', topo.num_nodes)
     env = TEEnv(topo, traffic, device='cuda')
     env.precompute_ecmp()
-    policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).cuda()
+    if IS_TEMPORAL:
+        policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k, temporal=True, history_len=12).cuda()
+    else:
+        policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).cuda()
     value = GNNValueNetwork(topo, hidden_dim=128).cuda()
     policy.load_state_dict(CKPT_D['policy'], strict=False)
     value.load_state_dict(CKPT_D['value'], strict=False)
