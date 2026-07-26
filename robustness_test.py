@@ -58,7 +58,7 @@ print(f'{"="*60}')
 for num_failures in [1, 3, 5, 10]:
     traffic = TrafficLoader('data/GEANTTM2', TOPO.num_nodes)
     env = TEEnv(TOPO, traffic, device='cuda')
-    rng = np.random.RandomState(42)
+    rng = np.random.RandomState(num_failures * 100)
     faulty = rng.choice(env.num_links, num_failures, replace=False)
     env.link_caps[faulty] *= 0.1
     env.precompute_ecmp()
@@ -80,9 +80,9 @@ print(f'3. Traffic Bursts')
 print(f'{"="*60}')
 for scale in [1.5, 2, 3, 5, 10]:
     traffic = TrafficLoader('data/GEANTTM2', TOPO.num_nodes)
-    orig = traffic.get_real_traffic(normalize=False).copy()
-    # Amplify ALL traffic by the scale factor to simulate burst
-    traffic.real_tm = orig * scale
+    orig_raw = traffic.raw_matrices.copy()
+    # Amplify raw data (get_real_traffic uses raw_matrices)
+    traffic.raw_matrices = orig_raw * scale
     agent, env = make_agent_env(traffic=traffic)
     res = evaluate(agent, env, 512)
     degrad = (res["avg_mlu"] - baseline_mlu) / baseline_mlu * 100
