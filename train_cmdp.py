@@ -377,24 +377,23 @@ def main():
         ep_corrections = []
         t0 = time.time()
 
-        if args.temporal:
-            H = args.history_len
-            n_batches = (env.num_tms - H) // cb
-            for batch_idx in range(n_batches):
-                t = H + batch_idx * cb
+        perm = torch.randperm(env.num_tms, device=device) if not args.temporal else None
+        H = args.history_len if args.temporal else 0
+
+        for start in range(0, env.num_tms, cb):
+            end = min(start+cb, env.num_tms)
+
+            if args.temporal:
+                t = H + start
+                if t + cb > env.num_tms:
+                    break
                 states, target_idx = env.get_temporal_states(t, H, cb)
                 idx_b = target_idx
-                raw_actions, log_probs, values = agent.act_batch(states)
-        else:
-            perm = torch.randperm(env.num_tms, device=device)
-
-            for start in range(0, env.num_tms, cb):
-                end = min(start+cb, env.num_tms)
+            else:
                 idx_b = perm[start:end]
-
                 states = env.get_states(idx_b)
-                raw_actions, log_probs, values = agent.act_batch(states)
 
+            raw_actions, log_probs, values = agent.act_batch(states)
             if args.method == 'safety':
                 safe_actions, corrections = agent.project_and_act(idx_b, raw_actions)
                 actions = safe_actions
