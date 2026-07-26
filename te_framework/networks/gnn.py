@@ -143,102 +143,12 @@ class TEGNNLLMPolicy(TEGNNPolicy):
 
     def encode_nodes(self, tm):
         """GNN encode → LLM enhance → enhanced node embeddings."""
-    def encode_nodes(self, tm):
-        if self.temporal:
-            B, H, N, _ = tm.shape
-            ne = super().encode_nodes(tm)
-            ne_avg = ne.reshape(B, H, N, -1).mean(dim=1)
-        else:
-            ne = super().encode_nodes(tm)
-            ne_avg = ne
-        enhanced = self.llm(tm, ne_avg)
+        ne = super().encode_nodes(tm)                # (B, N, D) from GNN
+        enhanced = self.llm(tm, ne)                   # (B, N, D) LLM reasoned
         return enhanced
 
     def forward(self, tm, path_mask=None):
         ne = self.encode_nodes(tm)
-        from_4d = hasattr(self, "temporal") and self.temporal and tm.dim() == 4
-        tm_cur = tm[:, -1] if from_4d else tm
-        return self.decode_pairs(ne, tm_cur, path_mask)
-    def encode_nodes(self, tm):
-        if self.temporal:
-            B, H, N, _ = tm.shape
-            ne = super().encode_nodes(tm)
-            ne_avg = ne.reshape(B, H, N, -1).mean(dim=1)
-        else:
-            ne = super().encode_nodes(tm)
-            ne_avg = ne
-        enhanced = self.llm(tm, ne_avg)
-        return enhanced
-
-    def forward(self, tm, path_mask=None):
-        ne = self.encode_nodes(tm)
-        from_4d = hasattr(self, "temporal") and self.temporal and tm.dim() == 4
-        tm_cur = tm[:, -1] if from_4d else tm
-        return self.decode_pairs(ne, tm_cur, path_mask)
-    def encode_nodes(self, tm):
-        if self.temporal:
-            B, H, N, _ = tm.shape
-            ne = super().encode_nodes(tm)
-            ne_avg = ne.reshape(B, H, N, -1).mean(dim=1)
-        else:
-            ne = super().encode_nodes(tm)
-            ne_avg = ne
-        enhanced = self.llm(tm, ne_avg)
-        return enhanced
-
-    def forward(self, tm, path_mask=None):
-        ne = self.encode_nodes(tm)
-        from_4d = hasattr(self, "temporal") and self.temporal and tm.dim() == 4
-        tm_cur = tm[:, -1] if from_4d else tm
-        return self.decode_pairs(ne, tm_cur, path_mask)
-    def encode_nodes(self, tm):
-        if self.temporal:
-            B, H, N, _ = tm.shape
-            ne = super().encode_nodes(tm)
-            ne_avg = ne.reshape(B, H, N, -1).mean(dim=1)
-        else:
-            ne = super().encode_nodes(tm)
-            ne_avg = ne
-        enhanced = self.llm(tm, ne_avg)
-        return enhanced
-
-    def forward(self, tm, path_mask=None):
-        ne = self.encode_nodes(tm)
-        from_4d = hasattr(self, "temporal") and self.temporal and tm.dim() == 4
-        tm_cur = tm[:, -1] if from_4d else tm
-        return self.decode_pairs(ne, tm_cur, path_mask)
-    def encode_nodes(self, tm):
-        if self.temporal:
-            B, H, N, _ = tm.shape
-            ne = super().encode_nodes(tm)
-            ne_avg = ne.reshape(B, H, N, -1).mean(dim=1)
-        else:
-            ne = super().encode_nodes(tm)
-            ne_avg = ne
-        enhanced = self.llm(tm, ne_avg)
-        return enhanced
-
-    def forward(self, tm, path_mask=None):
-        ne = self.encode_nodes(tm)
-        from_4d = hasattr(self, "temporal") and self.temporal and tm.dim() == 4
-        tm_cur = tm[:, -1] if from_4d else tm
-        return self.decode_pairs(ne, tm_cur, path_mask)
-    def encode_nodes(self, tm):
-        if self.temporal:
-            B, H, N, _ = tm.shape
-            ne = super().encode_nodes(tm)
-            ne_avg = ne.reshape(B, H, N, -1).mean(dim=1)
-        else:
-            ne = super().encode_nodes(tm)
-            ne_avg = ne
-        enhanced = self.llm(tm, ne_avg)
-        return enhanced
-
-    def forward(self, tm, path_mask=None):
-        ne = self.encode_nodes(tm)
-        from_4d = hasattr(self, "temporal") and self.temporal and tm.dim() == 4
-        tm_cur = tm[:, -1] if from_4d else tm
-        return self.decode_pairs(ne, tm_cur, path_mask)
         return self.decode_pairs(ne, tm, path_mask)
 
 
