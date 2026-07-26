@@ -69,3 +69,7 @@ print(f'\nFinal test MLU: {res["avg_mlu"]:.4f}')
 print(f'Best MLU: {best_mlu:.4f}')
 print('LMTE mlu.txt mean: 1.58')
 print('Pure GNN (our):    2.47')
+res = evaluate(agent, test_env, cb)
+import torch
+torch.save({"policy": policy.state_dict(), "value": value.state_dict()}, "checkpoints/lmte_llm.pt")
+print(f"Checkpoint saved to checkpoints/lmte_llm.pt")
