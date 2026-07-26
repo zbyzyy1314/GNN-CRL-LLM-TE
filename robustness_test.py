@@ -78,15 +78,21 @@ for num_failures in [1, 3, 5, 10]:
 print(f'\n{"="*60}')
 print(f'3. Traffic Bursts')
 print(f'{"="*60}')
-for scale in [1.5, 2, 3, 5, 10]:
+for scale in [2, 5, 10, 20, 30]:
     traffic = TrafficLoader('data/GEANTTM2', TOPO.num_nodes)
-    orig_raw = traffic.raw_matrices.copy()
-    # Amplify raw data (get_real_traffic uses raw_matrices)
-    traffic.raw_matrices = orig_raw * scale
+    real = traffic.get_real_traffic(normalize=False)  # (T, N, N) in kbps
+    # LMTE-style: per-OD-pair zero-mean Gaussian noise
+    rng = np.random.RandomState(42)
+    od_std = real.std(axis=0)  # (N, N) std per OD pair over time
+    noise = rng.randn(*real.shape) * od_std * (scale / 10.0)
+    for t in range(len(noise)):  # zero out self-pair noise per TM
+        np.fill_diagonal(noise[t], 0.0)
+    CONV = 100.0 * 8 / 300 / 1000  # TrafficLoader conversion factor
+    traffic.raw_matrices = (real + noise) / CONV
     agent, env = make_agent_env(traffic=traffic)
     res = evaluate(agent, env, 512)
     degrad = (res["avg_mlu"] - baseline_mlu) / baseline_mlu * 100
-    print(f'  Traffic x{scale:.1f}:      MLU={res["avg_mlu"]:.4f} ({degrad:+.1f}% vs baseline)')
+    print(f'  Burst scale={scale:2d}:      MLU={res["avg_mlu"]:.4f} ({degrad:+.1f}% vs baseline)')
 
 # ─── 4. Natural Drift ───
 # Fix: use GEANTTM2 (test set), split into time segments
