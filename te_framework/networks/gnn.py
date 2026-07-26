@@ -168,6 +168,9 @@ class GNNValueNetwork(nn.Module):
             if hasattr(m,'bias') and m.bias is not None:nn.init.constant_(m.bias,0)
 
     def forward(self,tm):
+        if tm.dim() == 4:
+            B, H, N, _ = tm.shape
+            tm = tm.mean(dim=1)  # collapse temporal
         B,N=tm.shape[:2]
         v=torch.cat([tm, tm.transpose(1,2)], dim=-1)
         ne=self.enc(v/v.max().clamp(min=1e-8))
