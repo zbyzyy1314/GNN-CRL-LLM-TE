@@ -49,6 +49,28 @@ class TEEnv:
         """Get normalized states for given TM indices. Returns (B, N, N)."""
         return self.norm_tm[indices]
 
+    def get_temporal_states(self, batch_start, history_len=12):
+        """Get sliding window of TMs for temporal causality.
+        
+        Returns state based on TM_{t-H} to TM_{t-1} (history),
+        and evaluates on TM_t (current).
+        
+        Args:
+            batch_start: current time step t (must be >= history_len)
+            history_len: number of past TMs to use as state
+            
+        Returns:
+            state: (B, history_len, N, N) normalized historical TMs
+            target_idx: (B,) indices of current TM for reward computation
+        """
+        B = min(batch_start - history_len + 1, self.num_tms - batch_start)
+        state = torch.stack([
+            self.norm_tm[batch_start - history_len + i]
+            for i in range(B)
+        ], dim=0)  # (B, H, N, N)
+        target_idx = torch.arange(batch_start, batch_start + B, device=self.device)
+        return state, target_idx
+
     def precompute_ecmp(self):
         """Pre-compute ECMP loads once for fast evaluation."""
         import numpy as np

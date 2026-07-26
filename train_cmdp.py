@@ -172,12 +172,26 @@ def evaluate(agent, env, cb=512):
     agent.policy.eval(); agent.value.eval()
     try:
         all_m, all_e, all_costs = [], [], []
-        indices = torch.arange(env.num_tms, device=env.device)
-        for start in range(0, env.num_tms, cb):
-            end = min(start+cb, env.num_tms)
-            idx_b = indices[start:end]
-            states = env.get_states(idx_b)
-            actions, _, _ = agent.act_batch(states, deterministic=True)
+        is_temporal = getattr(agent.policy, 'temporal', False)
+        H = 12
+        if is_temporal:
+            n_batches = (env.num_tms - H) // cb
+            for batch_idx in range(n_batches):
+                t = H + batch_idx * cb
+                states, target_idx = env.get_temporal_states(t, H)
+                idx_b = target_idx
+                actions, _, _ = agent.act_batch(states, deterministic=True)
+                _, mlus, loads = env.step_batch_idx(idx_b, actions)
+                all_m.append(mlus.cpu())
+                all_e.append(env.get_ecmp_mlu_batch(idx_b).cpu())
+                all_costs.append(env.compute_constraints(loads))
+        else:
+            indices = torch.arange(env.num_tms, device=env.device)
+            for start in range(0, env.num_tms, cb):
+                end = min(start+cb, env.num_tms)
+                idx_b = indices[start:end]
+                states = env.get_states(idx_b)
+                actions, _, _ = agent.act_batch(states, deterministic=True)
             _, mlus, loads = env.step_batch_idx(idx_b, actions)
             all_m.append(mlus.cpu())
             all_e.append(env.get_ecmp_mlu_batch(idx_b).cpu())
@@ -204,6 +218,8 @@ def main():
     p.add_argument('--device', default='cuda')
     p.add_argument('--epochs', type=int, default=100)
     p.add_argument('--collection-batch', type=int, default=128)
+    p.add_argument('--temporal', action='store_true', help='Use temporal history window (12-step) instead of single TM')
+    p.add_argument('--history-len', type=int, default=12, help='History window size for temporal mode')
     p.add_argument('--lr', type=float, default=1e-4)
     p.add_argument('--entropy-coef', type=float, default=0.05)
     p.add_argument('--network', default='cnn', choices=['cnn','gnn','gnn_llm'],
@@ -275,7 +291,7 @@ def main():
         policy = TEGNNLLMPolicy(topo, llm_enc, hidden_dim=128, max_k=topo.max_k).to(device)
         value = GNNValueNetwork(topo, hidden_dim=128).to(device)
     elif args.network == "gnn":
-        policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).to(device)
+        policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k, temporal=args.temporal, history_len=args.history_len).to(device)
         value = GNNValueNetwork(topo, hidden_dim=128).to(device)
     else:
         policy = PathSelectionNetwork(topo.num_nodes, topo.num_pairs, topo.max_k,
@@ -323,7 +339,7 @@ def main():
     elif args.method == 'dqn':
         # Create a second network as target
         if args.network == 'gnn':
-            target_net = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).to(device)
+            target_net = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k, temporal=args.temporal, history_len=args.history_len).to(device)
         else:
             target_net = PathSelectionNetwork(topo.num_nodes, topo.num_pairs, topo.max_k,
                                                fc_dims=[512,512]).to(device)
@@ -356,18 +372,28 @@ def main():
     best_mlu = float('inf')
 
     for epoch in range(1, args.epochs + 1):
-        perm = torch.randperm(env.num_tms, device=device)
         ep_r, ep_m = [], []
         ep_violations = {k: [] for k in thresholds}
         ep_corrections = []
         t0 = time.time()
 
-        for start in range(0, env.num_tms, cb):
-            end = min(start+cb, env.num_tms)
-            idx_b = perm[start:end]
+        if args.temporal:
+            H = args.history_len
+            n_batches = (env.num_tms - H) // cb
+            for batch_idx in range(n_batches):
+                t = H + batch_idx * cb
+                states, target_idx = env.get_temporal_states(t, H)
+                idx_b = target_idx
+                raw_actions, log_probs, values = agent.act_batch(states)
+        else:
+            perm = torch.randperm(env.num_tms, device=device)
 
-            states = env.get_states(idx_b)
-            raw_actions, log_probs, values = agent.act_batch(states)
+            for start in range(0, env.num_tms, cb):
+                end = min(start+cb, env.num_tms)
+                idx_b = perm[start:end]
+
+                states = env.get_states(idx_b)
+                raw_actions, log_probs, values = agent.act_batch(states)
 
             if args.method == 'safety':
                 safe_actions, corrections = agent.project_and_act(idx_b, raw_actions)
