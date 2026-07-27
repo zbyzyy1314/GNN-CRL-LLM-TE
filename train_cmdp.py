@@ -175,10 +175,9 @@ def evaluate(agent, env, cb=512):
         is_temporal = getattr(agent.policy, 'temporal', False)
         H = 12
         if is_temporal:
-            n_batches = (env.num_tms - H) // cb
-            for batch_idx in range(n_batches):
-                t = H + batch_idx * cb
-                states, target_idx = env.get_temporal_states(t, H, cb)
+            for t in range(H, env.num_tms, cb):
+                b = min(cb, env.num_tms - t)
+                states, target_idx = env.get_temporal_states(t, H, b)
                 idx_b = target_idx
                 actions, _, _ = agent.act_batch(states, deterministic=True)
                 _, mlus, loads = env.step_batch_idx(idx_b, actions)
@@ -385,9 +384,10 @@ def main():
 
             if args.temporal:
                 t = H + start
-                if t + cb > env.num_tms:
+                b = min(cb, env.num_tms - t)
+                if b <= 0:
                     break
-                states, target_idx = env.get_temporal_states(t, H, cb)
+                states, target_idx = env.get_temporal_states(t, H, b)
                 idx_b = target_idx
             else:
                 idx_b = perm[start:end]
