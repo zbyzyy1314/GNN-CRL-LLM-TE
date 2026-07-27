@@ -248,6 +248,8 @@ def main():
                    help='P95 utilization constraint threshold')
     p.add_argument('--lr-lambda', type=float, default=0.01,
                    help='Lagrange multiplier learning rate')
+    p.add_argument('--warm-start', action='store_true',
+                   help='Load baseline checkpoint before training (CVaR)')
     p.add_argument('--topo', default='data/GEANT')
     p.add_argument('--traffic', default='data/GEANTTM')
     p.add_argument('--test', default='data/GEANTTM2')
@@ -327,6 +329,20 @@ def main():
         agent = CVaRPPOAgent(
             policy, value, env.path_mask,
             lr=args.lr, entropy_coef=args.entropy_coef, ppo_epochs=args.ppo_epochs, device=device)
+        if args.warm_start:
+            ckpt_path = os.path.join(args.ckpt_dir, 'baseline_best.pt')
+            if os.path.exists(ckpt_path):
+                ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
+                skip_keys = {'pair_src', 'pair_dst', 'edge_index', 'edge_feat', 'enc.', 'dec.'}
+                policy_state = {k: v for k, v in ckpt['policy'].items()
+                                if not any(sk in k for sk in skip_keys)}
+                missing, _ = policy.load_state_dict(policy_state, strict=False)
+                value_state = {k: v for k, v in ckpt['value'].items()
+                               if not any(sk in k for sk in skip_keys)}
+                value.load_state_dict(value_state, strict=False)
+                print(f'  Warm-start loaded baseline_best.pt ({len(missing)} topology keys skipped)')
+            else:
+                print(f'  Warning: {ckpt_path} not found, training from scratch')
     elif args.method == 'combined':
         safety_layer = None if args.no_safety else SafetyLayer(env, max_iter=3, max_check=20)
         agent = CombinedCMDPAgent(
