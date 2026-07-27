@@ -424,8 +424,15 @@ def main():
                 # Train on RAW actions, but reward from CORRECTED actions
                 agent.update(states, raw_actions, log_probs, rewards, values)
             elif args.method == 'cvar':
-                # Minimize CVaR tail risk
-                cvar_r = -constraint_costs['cvar_util']
+                # Weighted CVaR: exponential weights on top 5% links
+                cap = env.link_caps  # (L,)
+                util = loads / cap.unsqueeze(0)   # (B, L)
+                sorted_u, _ = util.sort(dim=1, descending=True)
+                K = max(1, int(0.05 * topo.num_links))
+                topk = sorted_u[:, :K]             # (B, K) worst K links
+                weights = torch.softmax(topk * 2.0, dim=1)  # worst link × exp(2)
+                wcvar = (topk * weights).sum(dim=1)          # weighted mean
+                cvar_r = -wcvar
                 agent.update(states, raw_actions, log_probs, cvar_r, values)
             elif args.method == 'combined':
                 train_r, _ = agent.compute_combined_reward(constraint_costs)
