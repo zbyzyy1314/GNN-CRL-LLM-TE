@@ -343,6 +343,23 @@ def main():
                 print(f'  Warm-start loaded baseline_best.pt ({len(missing)} topology keys skipped)')
             else:
                 print(f'  Warning: {ckpt_path} not found, training from scratch')
+    elif args.method == 'direct':
+        # Direct optimization: ratios → MLU → backward (no PPO)
+        agent = type('DirectOpt', (), {})()
+        agent.policy = policy
+        agent.optimizer = torch.optim.Adam(policy.parameters(), lr=args.lr)
+        # Lagrangian-style lambda for constraints
+        agent.lambdas = {k: torch.tensor(0.0, device=device) for k in thresholds}
+        agent.lr_lambda = args.lr_lambda
+        agent.thresholds = thresholds
+        agent.constraint_names = list(thresholds.keys())
+        agent.link_mask = env.link_mask
+        agent.link_caps = env.link_caps
+        agent.num_pairs = topo.num_pairs
+        agent.path_mask = env.path_mask
+        def agent_get_lambda(self2):
+            return {k: v.item() for k, v in self2.lambdas.items()}
+        agent.get_lambda_state = agent_get_lambda.__get__(agent)
     elif args.method == 'combined':
         safety_layer = None if args.no_safety else SafetyLayer(env, max_iter=3, max_check=20)
         agent = CombinedCMDPAgent(
@@ -422,11 +439,41 @@ def main():
                     ep_corrections.append(corrections.float().mean().item())
                 else:
                     actions = raw_actions
+            if args.method == 'direct':
+                # Direct optimization: ratios → loads → MLU → backward
+                B = states.shape[0]
+                logits = policy(states, env.path_mask)  # (B, P*K)
+                ratios = F.softmax(logits.view(B, topo.num_pairs, -1), dim=-1)  # (B, P, K)
+                p_idx = torch.arange(topo.num_pairs, device=device)
+                s, d = topo.pair_idx_to_sd[:, 0], topo.pair_idx_to_sd[:, 1]
+                demands = env.real_tm[idx_b][:, s, d]  # (B, P)
+                ratios = ratios * env.path_mask.unsqueeze(0)  # zero out invalid paths
+                ratios = ratios / (ratios.sum(dim=-1, keepdim=True) + 1e-8)
+                # Link loads via einsum
+                link_loads = torch.einsum('bp,bpk,pkl->bl', demands, ratios, env.link_mask)
+                mlus = (link_loads / env.link_caps.unsqueeze(0)).max(dim=1).values
+                constraint_costs = env.compute_constraints(link_loads)
+                # Loss = MLU + Lagrangian penalties
+                loss = mlus.mean()
+                for name in agent.constraint_names:
+                    cost = constraint_costs[name]
+                    excess = torch.relu(cost - agent.thresholds[name])
+                    loss = loss + (agent.lambdas[name] * excess).mean()
+                agent.optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5)
+                agent.optimizer.step()
+                # Update lambdas
+                for name in agent.constraint_names:
+                    mc = constraint_costs[name].mean()
+                    agent.lambdas[name] = torch.clamp(
+                        agent.lambdas[name] + agent.lr_lambda * (mc - agent.thresholds[name]), min=0.0)
+                rewards = -mlus
+                loads = link_loads
             else:
                 actions = raw_actions
-
-            rewards, mlus, loads = env.step_batch_idx(idx_b, actions)
-            constraint_costs = env.compute_constraints(loads)
+                rewards, mlus, loads = env.step_batch_idx(idx_b, actions)
+                constraint_costs = env.compute_constraints(loads)
 
             if args.method == 'lagrangian':
                 train_r, violations = agent.compute_lagrangian_reward(
