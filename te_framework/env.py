@@ -73,12 +73,20 @@ class TEEnv:
 
     def precompute_ecmp(self):
         """Pre-compute ECMP loads once for fast evaluation."""
+        import os
+        # Try loading from cache
+        cache_file = self.topo.cache_file.replace('_v2.pkl', '_ecmp.pt')
+        if os.path.exists(cache_file):
+            self._ecmp_loads = torch.load(cache_file, map_location=self.device, weights_only=True)
+            self._ecmp_mlu = (self._ecmp_loads / self.link_caps.unsqueeze(0)).max(dim=1).values
+            return self.compute_constraints(self._ecmp_loads)
         import numpy as np
         from te_framework.routing import ecmp_traffic_distribution
         real = self.traffic.get_real_traffic(normalize=False)
         loads = [ecmp_traffic_distribution(self.topo, real[i]) for i in range(self.num_tms)]
         self._ecmp_loads = torch.tensor(np.stack(loads), dtype=torch.float32, device=self.device)
         self._ecmp_mlu = (self._ecmp_loads / self.link_caps.unsqueeze(0)).max(dim=1).values
+        torch.save(self._ecmp_loads.cpu(), cache_file)
         return self.compute_constraints(self._ecmp_loads)
 
     def step_batch(self, states, actions):
