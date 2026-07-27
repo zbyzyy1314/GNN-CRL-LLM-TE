@@ -80,4 +80,4 @@ for epoch in range(1, args.epochs+1):
         print(f'Epoch {epoch:3d} | train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}{tag}')
 
 res = evaluate(test_env, policy)
-print(f'\nFinal train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} p95={res["p95_util"]:.4f}')
+print(f'\nFinal train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}')
