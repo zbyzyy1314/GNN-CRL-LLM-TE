@@ -7,11 +7,6 @@ from te_framework.traffic import TrafficLoader
 
 p = argparse.ArgumentParser()
 p.add_argument('--seed', type=int, default=42)
-p.add_argument('--lam', type=float, default=0.5, help='Initial Lagrange multiplier')
-p.add_argument('--mean-util-threshold', type=float, default=0.5)
-p.add_argument('--overload-threshold', type=float, default=0.2)
-p.add_argument('--p95-util-threshold', type=float, default=1.5)
-p.add_argument('--lr-lambda', type=float, default=0.02)
 p.add_argument('--epochs', type=int, default=40)
 args = p.parse_args()
 torch.manual_seed(args.seed); np.random.seed(args.seed)
@@ -30,11 +25,6 @@ optimizer = torch.optim.Adam(policy.parameters(), lr=1e-4)
 lm = env.link_mask; lc = env.link_caps
 sd = torch.tensor(topo.pair_idx_to_sd, device=device)
 cb = 128; best_mlu = float('inf')
-
-lambdas = {k: torch.tensor(args.lam, device=device) for k in ['mean_util','overload_ratio','p95_util']}
-thresholds = {'mean_util': args.mean_util_threshold, 'overload_ratio': args.overload_threshold, 'p95_util': args.p95_util_threshold}
-CNS = ['mean_util','overload_ratio','p95_util']
-use_lag = True
 
 def evaluate(test_env, policy):
     policy.eval(); all_m, all_u, all_o, all_p = [], [], [], []
@@ -70,26 +60,14 @@ for epoch in range(1, args.epochs+1):
         demands = env.real_tm[idx_b][:, sd[:,0], sd[:,1]]
         loads = torch.einsum('bp,bpk,pkl->bl', demands, ratios, lm)
         mlu = (loads / lc.unsqueeze(0)).max(dim=1).values.mean()
-        loss = mlu
-        if use_lag:  # always True for Lagrangian
-            costs = env.compute_constraints(loads)
-            for name in CNS:
-                loss = loss + (lambdas[name] * torch.relu(costs[name] - thresholds[name])).mean()
-        optimizer.zero_grad(); loss.backward()
+        optimizer.zero_grad(); mlu.backward()
         torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5); optimizer.step()
-        if use_lag:  # always True for Lagrangian
-            for name in CNS:
-                mc = costs[name].mean().detach()
-                lambdas[name] = torch.clamp(lambdas[name] + args.lr_lambda * (mc - thresholds[name]), min=0.0)
         ep_m.append(mlu.item())
     if epoch % 5 == 0 or epoch == 1:
         res = evaluate(test_env, policy)
         tag = ' *BEST*' if res['avg_mlu'] < best_mlu else ''
         if res['avg_mlu'] < best_mlu: best_mlu = res['avg_mlu']
         print(f'Epoch {epoch:3d} | train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}{tag}')
-        if use_lag:  # always True for Lagrangian
-            ls = {k: f'{lambdas[k].item():.3f}' for k in CNS}
-            print(f'         lambda: {ls["mean_util"]} {ls["overload_ratio"]} {ls["p95_util"]}')
 
 res = evaluate(test_env, policy)
 print(f'\nFinal train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} p95={res["p95_util"]:.4f}')
