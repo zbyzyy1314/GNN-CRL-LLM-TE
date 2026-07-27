@@ -251,6 +251,7 @@ def main():
     p.add_argument('--topo', default='data/GEANT')
     p.add_argument('--traffic', default='data/GEANTTM')
     p.add_argument('--test', default='data/GEANTTM2')
+    p.add_argument('--no-safety', action='store_true', help='Skip safety in combined mode')
     p.add_argument('--capacity-scale', type=float, default=1.0,
                    help='Scale link capacities (lower → trigger safety layer)')
     args = p.parse_args()
@@ -327,7 +328,7 @@ def main():
             policy, value, env.path_mask,
             lr=args.lr, entropy_coef=args.entropy_coef, ppo_epochs=args.ppo_epochs, device=device)
     elif args.method == 'combined':
-        safety_layer = SafetyLayer(env, max_iter=3, max_check=20)
+        safety_layer = None if args.no_safety else SafetyLayer(env, max_iter=3, max_check=20)
         agent = CombinedCMDPAgent(
             policy, value, env.path_mask,
             constraint_names=['mean_util', 'overload_ratio', 'p95_util'],
@@ -399,9 +400,12 @@ def main():
                 actions = safe_actions
                 ep_corrections.append(corrections.float().mean().item())
             elif args.method == 'combined':
-                safe_actions, corrections = agent.safety.project(idx_b, raw_actions)
-                actions = safe_actions
-                ep_corrections.append(corrections.float().mean().item())
+                if agent.safety is not None:
+                    safe_actions, corrections = agent.safety.project(idx_b, raw_actions)
+                    actions = safe_actions
+                    ep_corrections.append(corrections.float().mean().item())
+                else:
+                    actions = raw_actions
             else:
                 actions = raw_actions
 
