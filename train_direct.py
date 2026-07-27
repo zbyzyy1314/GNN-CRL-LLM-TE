@@ -109,7 +109,7 @@ for epoch in range(1, 41):
         res = evaluate_dir_full(test_env, policy, cb)
         tag = ' *BEST*' if res['avg_mlu'] < best_mlu else ''
         if res['avg_mlu'] < best_mlu: best_mlu = res['avg_mlu']
-        print(f'Epoch {epoch:3d} | MLU={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}{tag}')
+        print(f'Epoch {epoch:3d} | train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}{tag}')
 
 res = evaluate_dir_full(test_env, policy, cb)
-print(f'\nFinal test MLU={res["avg_mlu"]:.4f} mean_util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}')
+print(f'\nFinal train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}')
