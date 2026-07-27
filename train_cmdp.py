@@ -173,7 +173,7 @@ def evaluate(agent, env, cb=512):
     try:
         all_m, all_e, all_costs = [], [], []
         is_temporal = getattr(agent.policy, 'temporal', False)
-        H = 12
+        H = getattr(agent.policy, 'history_len', 12)
         if is_temporal:
             for t in range(H, env.num_tms, cb):
                 b = min(cb, env.num_tms - t)
