@@ -1,0 +1,83 @@
+import sys, torch, numpy as np, time, argparse
+sys.path.insert(0, '.')
+from te_framework.topology import Topology
+from te_framework.env import TEEnv
+from te_framework.networks.gnn import TEGNNPolicy
+from te_framework.traffic import TrafficLoader
+
+p = argparse.ArgumentParser()
+p.add_argument('--seed', type=int, default=42)
+p.add_argument('--cvar-beta', type=float, default=2.0, help='Exponential weight factor (0=uniform, >0=weighted CVaR)')
+p.add_argument('--epochs', type=int, default=40)
+args = p.parse_args()
+torch.manual_seed(args.seed); np.random.seed(args.seed)
+device = 'cuda'
+
+topo = Topology('data/LMTE_correct_topo', max_paths_per_pair=8)
+train = TrafficLoader('data/LMTE_train.txt', topo.num_nodes)
+test = TrafficLoader('data/LMTE_test.txt', topo.num_nodes)
+env = TEEnv(topo, train, device=device)
+test_env = TEEnv(topo, test, device=device)
+env.precompute_ecmp(); test_env.precompute_ecmp()
+print(f'N={topo.num_nodes} L={topo.num_links} P={topo.num_pairs}')
+
+policy = TEGNNPolicy(topo, hidden_dim=128, max_k=topo.max_k).to(device)
+optimizer = torch.optim.Adam(policy.parameters(), lr=1e-4)
+lm = env.link_mask; lc = env.link_caps
+sd = torch.tensor(topo.pair_idx_to_sd, device=device)
+cb = 128; best_mlu = float('inf')
+K = max(1, int(0.05 * topo.num_links))  # top 5% links (= 4 links)
+beta = args.cvar_beta
+
+def evaluate(test_env, policy):
+    policy.eval(); all_m, all_u, all_o, all_p = [], [], [], []
+    with torch.no_grad():
+        idx = torch.arange(test_env.num_tms, device=device)
+        for s in range(0, test_env.num_tms, cb):
+            e = min(s+cb, test_env.num_tms); idx_b = idx[s:e]
+            states = test_env.get_states(idx_b); B = states.shape[0]
+            logits = policy(states, test_env.path_mask)
+            ratios = torch.softmax(logits.view(B, topo.num_pairs, -1), dim=-1)
+            ratios = ratios * test_env.path_mask.unsqueeze(0)
+            ratios = ratios / (ratios.sum(dim=-1, keepdim=True) + 1e-8)
+            demands = test_env.real_tm[idx_b][:, sd[:,0], sd[:,1]]
+            loads = torch.einsum('bp,bpk,pkl->bl', demands, ratios, lm)
+            u = loads / lc.unsqueeze(0); su = u.sort(dim=1).values
+            all_m.append(u.max(dim=1).values.cpu()); all_u.append(u.mean(dim=1).cpu())
+            all_o.append((u > 0.8).float().mean(dim=1).cpu())
+            cu = u.cpu().numpy()
+            all_p.append(torch.tensor([np.percentile(x, 95) for x in cu]))
+    a = lambda x: torch.cat(x).mean().item(); policy.train()
+    return {'avg_mlu': a(all_m), 'mean_util': a(all_u), 'overload_ratio': a(all_o), 'p95_util': a(all_p)}
+
+for epoch in range(1, args.epochs+1):
+    ep_m = []; t0 = time.time()
+    perm = torch.randperm(env.num_tms, device=device)
+    for start in range(0, env.num_tms, cb):
+        end = min(start+cb, env.num_tms); idx_b = perm[start:end]
+        states = env.get_states(idx_b); B = states.shape[0]
+        logits = policy(states, env.path_mask)
+        ratios = torch.softmax(logits.view(B, topo.num_pairs, -1), dim=-1)
+        ratios = ratios * env.path_mask.unsqueeze(0)
+        ratios = ratios / (ratios.sum(dim=-1, keepdim=True) + 1e-8)
+        demands = env.real_tm[idx_b][:, sd[:,0], sd[:,1]]
+        loads = torch.einsum('bp,bpk,pkl->bl', demands, ratios, lm)
+        util = loads / lc.unsqueeze(0)
+        su, _ = util.sort(dim=1, descending=True)
+        topk = su[:, :K]  # top 4 worst links
+        if beta > 0:
+            w = torch.softmax(topk * beta, dim=1)  # exponential weights
+            cvar_val = (topk * w).sum(dim=1).mean()
+        else:
+            cvar_val = topk.mean(dim=1).mean()  # uniform CVaR
+        optimizer.zero_grad(); cvar_val.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.5); optimizer.step()
+        ep_m.append(cvar_val.item())
+    if epoch % 5 == 0 or epoch == 1:
+        res = evaluate(test_env, policy)
+        tag = ' *BEST*' if res['avg_mlu'] < best_mlu else ''
+        if res['avg_mlu'] < best_mlu: best_mlu = res['avg_mlu']
+        print(f'Epoch {epoch:3d} | train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} overload={res["overload_ratio"]:.4f} p95={res["p95_util"]:.4f}{tag}')
+
+res = evaluate(test_env, policy)
+print(f'\nFinal train={np.mean(ep_m):.4f} test={res["avg_mlu"]:.4f} util={res["mean_util"]:.4f} p95={res["p95_util"]:.4f}')
