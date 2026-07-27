@@ -192,10 +192,10 @@ def evaluate(agent, env, cb=512):
                 idx_b = indices[start:end]
                 states = env.get_states(idx_b)
                 actions, _, _ = agent.act_batch(states, deterministic=True)
-            _, mlus, loads = env.step_batch_idx(idx_b, actions)
-            all_m.append(mlus.cpu())
-            all_e.append(env.get_ecmp_mlu_batch(idx_b).cpu())
-            all_costs.append(env.compute_constraints(loads))
+                _, mlus, loads = env.step_batch_idx(idx_b, actions)
+                all_m.append(mlus.cpu())
+                all_e.append(env.get_ecmp_mlu_batch(idx_b).cpu())
+                all_costs.append(env.compute_constraints(loads))
         all_m = torch.cat(all_m); all_e = torch.cat(all_e)
         agg_costs = {}
         for k in all_costs[0]:
