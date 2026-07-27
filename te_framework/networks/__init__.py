@@ -66,7 +66,7 @@ class PathSelectionNetwork(nn.Module):
         if x.dim() == 3:
             x = x.unsqueeze(1)
         elif x.dim() == 4:
-            x = x.mean(dim=1, keepdim=True)
+            x = x[:, -1:]      # temporal: take last frame (closest to target)
 
         batch = x.shape[0]
         feat = self.conv(x)
@@ -138,7 +138,7 @@ class ValueNetwork(nn.Module):
         if x.dim() == 3:
             x = x.unsqueeze(1)
         elif x.dim() == 4:
-            x = x.mean(dim=1, keepdim=True)
+            x = x[:, -1:]      # temporal: take last frame
         batch = x.shape[0]
         feat = self.conv(x)
         feat = feat.reshape(batch, -1)
