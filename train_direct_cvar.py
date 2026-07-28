@@ -11,7 +11,7 @@ p.add_argument('--cvar-beta', type=float, default=2.0, help='Exponential weight 
 p.add_argument('--epochs', type=int, default=40)
 args = p.parse_args()
 torch.manual_seed(args.seed); np.random.seed(args.seed)
-device = 'cuda'
+evice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 topo = Topology('data/LMTE_correct_topo', max_paths_per_pair=8)
 train = TrafficLoader('data/LMTE_train.txt', topo.num_nodes)
