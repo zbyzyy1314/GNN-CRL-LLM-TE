@@ -5,11 +5,6 @@ Supports the existing GEANT topology format:
   Line 1: "Node: <N>\tLink: <L>"
   Line 2: header
   Lines 3+: "link_idx\tsrc\tdst\tweight\tcapacity"
-
-加速版本:用 igraph(C 后端)替代 NetworkX 算 K 短路,配合 joblib 多进程并行。
-  - 算法等价(都是 Yen's + 剪枝),不影响训练效果
-  - 200 节点:1-2 小时 → 5-10 分钟
-  - 首次加载需 pip install python-igraph joblib
 """
 
 import os
@@ -67,80 +62,36 @@ class Topology:
             self.__dict__.update(cached)
             return
 
-        print(f'[*] Computing up to {self.max_paths} shortest paths per pair '
-              f'(igraph + parallel)...')
-
-        # ---- 加速部分:NetworkX -> igraph + joblib 并行 ----
-        try:
-            import igraph as ig
-            from joblib import Parallel, delayed
-            igraph_available = True
-        except ImportError:
-            print('    [WARN] igraph/joblib 未安装,回退到 NetworkX 慢速版。'
-                  '建议: pip install python-igraph joblib')
-            igraph_available = False
-
-        if igraph_available:
-            g_ig = ig.Graph.from_networkx(self.graph)
-            max_paths = self.max_paths
-
-            def compute_one(s, d):
-                try:
-                    paths = g_ig.get_k_shortest_paths(
-                        v=s, to=d, k=max_paths, weights='weight')
-                except Exception:
-                    paths = []
-                return (s, d, paths)
-
-            all_pairs = [(s, d)
-                         for s in range(self.num_nodes)
-                         for d in range(self.num_nodes)
-                         if s != d]
-
-            n_jobs = min(8, os.cpu_count() or 1)
-            print(f'    using {n_jobs} workers (igraph)')
-            results = Parallel(n_jobs=n_jobs, backend='loky', verbose=0)(
-                delayed(compute_one)(s, d) for s, d in all_pairs
-            )
-            results.sort(key=lambda x: (x[0], x[1]))
-        else:
-            # ---- 回退:原始 NetworkX 单进程版(逻辑跟原来完全一致) ----
-            results = []
-            for s in range(self.num_nodes):
-                for d in range(self.num_nodes):
-                    if s == d:
-                        continue
-                    try:
-                        node_paths = list(nx.shortest_simple_paths(
-                            self.graph, s, d, weight='weight'))
-                        node_paths = node_paths[:self.max_paths]
-                    except nx.NetworkXNoPath:
-                        node_paths = []
-                    results.append((s, d, node_paths))
-
-        # ---- 组装 pair_idx / paths_node / paths_link(跟原代码一致) ----
+        print(f'[*] Computing up to {self.max_paths} shortest paths per pair...')
         self.num_pairs = 0
         self.pair_idx_to_sd = []
         self.pair_sd_to_idx = {}
         self.paths_node = []
         self.paths_link = []
 
-        for s, d, node_paths in results:
-            self.pair_sd_to_idx[(s, d)] = self.num_pairs
-            self.pair_idx_to_sd.append((s, d))
-            self.num_pairs += 1
+        for s in range(self.num_nodes):
+            for d in range(self.num_nodes):
+                if s == d:
+                    continue
+                self.pair_sd_to_idx[(s, d)] = self.num_pairs
+                self.pair_idx_to_sd.append((s, d))
+                self.num_pairs += 1
 
-            node_list, link_list = [], []
-            for np_nodes in node_paths:
                 try:
-                    links = [self.link_sd_to_idx[(np_nodes[i], np_nodes[i + 1])]
+                    node_paths = list(nx.shortest_simple_paths(
+                        self.graph, s, d, weight='weight'))
+                    node_paths = node_paths[:self.max_paths]
+                except nx.NetworkXNoPath:
+                    node_paths = []
+
+                node_list, link_list = [], []
+                for np_nodes in node_paths:
+                    links = [self.link_sd_to_idx[(np_nodes[i], np_nodes[i+1])]
                              for i in range(len(np_nodes) - 1)]
                     node_list.append(np.array(np_nodes, dtype=np.int32))
                     link_list.append(np.array(links, dtype=np.int32))
-                except KeyError:
-                    pass
-            self.paths_node.append(node_list)
-            self.paths_link.append(link_list)
+                self.paths_node.append(node_list)
+                self.paths_link.append(link_list)
 
         self.max_k = min(max(len(pl) for pl in self.paths_link), self.max_paths)
         self.path_mask = np.zeros((self.num_pairs, self.max_k), dtype=bool)
